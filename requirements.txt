@@ -1,0 +1,15 @@
+efficientnet-pytorch==0.7.1
+Flask==2.2.2
+librosa==0.10.0.post2
+numpy==1.24.3
+opencv-python==4.7.0.72
+pip==23.0.1
+pydub==0.25.1
+tokenizers==0.13.3
+torch==2.0.1
+torchaudio==2.0.2
+torchvision==0.15.2
+transformers==4.29.1
+validators==0.20.0
+websockets==11.0.3
+yt-dlp @ https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
