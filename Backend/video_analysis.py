@@ -2,18 +2,23 @@ import numpy as np
 from flask import Flask, request, jsonify
 import os
 import yt_dlp
+import torchvision
 import torchvision.transforms as transforms
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 import torch
 import librosa
 from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
 from efficientnet_pytorch import EfficientNet
-import cv2
+from tqdm import tqdm
 
 USE_MODEL = False
+REMOVE_AFTER_PROCESSING = False
+BATCH_SIZE = 4
 
 app = Flask(__name__)
 
-if USE_MODEL == True:
+if USE_MODEL == False:
     # with open('./labels_map.txt') as f:
     #     labels_map = json.load(f)
     # labels_map = [labels_map[str(i)] for i in range(1000)]
@@ -23,19 +28,51 @@ if USE_MODEL == True:
     image_model = EfficientNet.from_pretrained('efficientnet-b4')
     image_model.to(device).eval()
 
-tfms = transforms.Compose([transforms.ToPILImage(),
-                        transforms.Resize(224),
-                        transforms.ToTensor(),
+tfms = transforms.Compose([transforms.Resize(224, antialias=True),
                         transforms.Normalize(
                                 [0.485, 0.456, 0.406],
                                 [0.229, 0.224, 0.225]),
                         ])
 
 AUDIO_EXTENSION = 'wav'
+VIDEO_EXTENSION = 'mp4'
 
 model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
 feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+
+
+from torch.utils.data import Dataset
+
+class CustomTensorDataset(Dataset):
+  def __init__(self, dataset, transform_list=None):
+    self.tensors = dataset
+    self.transforms = transform_list
+
+  def __getitem__(self, index):
+    x = self.tensors[index]
+
+    if self.transforms:
+      x = self.transforms(x)
+
+    return x
+
+  def __len__(self):
+    return self.tensors.size(0)
+
+
+def analyse_frame(image):
+    if USE_MODEL == True:
+        img = tfms(image).to(device)
+        output = image_model(img)
+        class_idx = output.argmax(dim=-1)
+        return class_idx
+    else:
+        if image.dim() == 4:
+            return np.random.beta(1, 5, image.shape[0])
+        else:
+            return np.random.beta(1, 5)
+    
 
 def download_audio(url, output_path):
     ydl_opts = {
@@ -51,8 +88,17 @@ def download_audio(url, output_path):
         info_with_audio_extension['ext'] = AUDIO_EXTENSION
         return ydl.prepare_filename(info_with_audio_extension), info
 
-def frame_to_milisec(fps, frame_num):
-    return int(float(frame_num / fps) * 100 + int(frame_num % fps / 30. * 100))
+def download_video(url, output_path):
+    
+    ydl_opts = {
+        'outtmpl': output_path + '/%(id)s.%(ext)s',
+        'format': '160',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        info_with_video_extension = dict(info)
+        info_with_video_extension['ext'] = VIDEO_EXTENSION
+        return ydl.prepare_filename(info_with_video_extension), info
 
 @app.route('/youtube_audio',methods=['POST'])
 def analyse_audio():
@@ -89,58 +135,58 @@ def analyse_audio():
 @app.route('/youtube_video',methods=['POST'])
 def analyse_frames():
 
+    torch.cuda.empty_cache()
     youtubeurl = request.args.get('youtube-url')
 
-    ydl = yt_dlp.YoutubeDL({})
-    info_dict = ydl.extract_info(youtubeurl, download=False)
-    formats = info_dict.get('formats')[::-1]
+    out_mp4_file, info_dict = download_video(youtubeurl, '.')
+    print(out_mp4_file)
+
+    stream = "video"
     
-    for f in formats:
-        if f.get('format_note', None) == '144p' and f.get('format_id', None) == '278':
-            url = f.get('url',None)
-            fps = f.get('fps',None)
+    video_frames = torch.empty(0)
+    video_pts = []
+    video = torchvision.io.VideoReader(out_mp4_file, stream)
+    meta_data = video.get_metadata()
+    print(meta_data)
+    fps = round(meta_data['video']['fps'][0])
 
-            cap = cv2.VideoCapture(url)
+    video.set_current_stream("video")
+    frames = []
+    for frame in video:
+        frames.append(frame['data'].type(dtype=torch.float32))
+        video_pts.append(frame['pts'])
+    if len(frames) > 0:
+        
+        video_frames = torch.stack(frames, 0)
 
-            if not cap.isOpened():
-                print('video not opened')
-                exit(-1)
+    ds = CustomTensorDataset(dataset=video_frames, transform_list=tfms)
+    
 
-            frame_num = 0
-            frames = []
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
+    video.container.close()
 
-                img = np.copy(frame)
-                img = tfms(frame)
+    dataloader = DataLoader(ds, batch_size=BATCH_SIZE)
 
-                frames.append(img)
-                    
-                frame_num += 1
+    if REMOVE_AFTER_PROCESSING == True:
+        os.remove(out_mp4_file)
 
-                if cv2.waitKey(30)&0xFF == ord('q'):
-                    break
+    
+    values = torch.empty(0) if USE_MODEL else []
+    i = 0
 
-            cap.release()
-
-
-    cv2.destroyAllWindows()
-
+    with tqdm(dataloader, unit="batch") as tepoch:
+        for imgs in tepoch:
+            outputs = analyse_frame(imgs)
+            if USE_MODEL:
+                values = torch.hstack([values, outputs.detach().cpu()])
+            else:
+                values = [*values, *outputs]
+    data = {}
+    i = 0
+    for pts in video_pts:
+        data[round(pts, 3)] = int(values[i].item()) if USE_MODEL else round(values[i], 3)
+        i += 1
     analysis = {}
-    analysis["data"] = {}
-    frame_num = 0
-    for fr in frames:
-        if USE_MODEL == True:
-            im = fr[None,:,:,:].to(device)
-            output = image_model(im)
-            class_idx = output.argmax(dim=-1)
-            value = np.random.beta(1, 5, class_idx.size())[0]
-        value = np.random.beta(1, 5)
-        analysis["data"]["{}".format(frame_to_milisec(fps, frame_num))] = value
-        frame_num += 1
-
+    analysis["data"] = data
     analysis["url"] = info_dict.get('webpage_url')
     analysis["title"] = info_dict.get('title')
 
