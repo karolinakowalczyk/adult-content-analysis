@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
@@ -6,22 +6,59 @@ import "./DataForm.scss";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
+
+//  TO DO
+// don't allow user sent url and file both
+// check file extention
+// POST data
+
 export function DataForm() {
   const [url, setUrl] = useState("");
-  const [file, setFile] = useState("");
+  const [file, setFile] = useState({
+    lastModified: Number,
+    lastModifiedDate: String,
+    name: "",
+    size: Number,
+    type: "",
+    webkitRelativePath: String,
+  });
   const [email, setEmail] = useState("");
 
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors },
   } = useForm();
-  const isUrlOrFile = (url, file) => {
-    if (!url && !file) {
+
+  const isUrlOrFile = () => {
+    if (!url && !file.name) {
       return false;
     }
+    return true;
+  };
+
+  const checkFileExtention = () => {
+    console.log(file);
+    if (!file) {
+      return;
+    }
+    // switch (file.type) {
+    //   case "video/mp4":
+    //     return true;
+    //   case "audio/mpeg":
+    //     return true;
+    //   default:
+    //     setFile({
+    //       lastModified: Number,
+    //       lastModifiedDate: String,
+    //       name: String,
+    //       size: Number,
+    //       type: String,
+    //       webkitRelativePath: String,
+    //     });
+    //     return false;
+    // }
     return true;
   };
 
@@ -46,11 +83,13 @@ export function DataForm() {
                 placeholder="Provide video URL"
                 value={url}
                 {...register("url", {
+                  validate: { isUrlOrFile },
                   onChange: (e) => {
                     e.preventDefault();
                     setUrl(e.target.value);
                   },
                 })}
+                aria-invalid={errors.url ? "true" : "false"}
               />
             </Form.Group>
           </Col>
@@ -62,15 +101,20 @@ export function DataForm() {
               <Form.Label>Video file: </Form.Label>
               <Form.Control
                 type="file"
-                value={file}
+                //value={file}
                 {...register("file", {
+                  validate: { isUrlOrFile, checkFileExtention },
                   onChange: (e) => {
                     e.preventDefault();
-                    setFile(e.target.value);
+                    setFile(e.target.files[0]);
                   },
                 })}
+                aria-invalid={errors.file ? "true" : "false"}
               />
             </Form.Group>
+            {errors.file?.type === "checkFileExtention" && (
+              <Alert variant="danger">It's not valid video format!</Alert>
+            )}
           </Col>
         </Row>
         <Row>
@@ -96,6 +140,9 @@ export function DataForm() {
             )}
           </Col>
         </Row>
+        {errors.url?.type === "isUrlOrFile" && (
+          <Alert variant="danger">URL or video file is required!</Alert>
+        )}
         <Button type="submit">Submit form</Button>
       </Form>
     </Container>
