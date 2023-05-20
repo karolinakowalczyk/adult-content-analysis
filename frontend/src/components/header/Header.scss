@@ -1,0 +1,9 @@
+@import "node_modules/bootstrap/scss/bootstrap";
+
+.header {
+    background-color: $primary;
+    padding: 0.5rem 5rem 0.5rem 5rem;
+}
+h1 {
+    color: $light;
+}
