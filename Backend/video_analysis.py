@@ -1,6 +1,8 @@
 import numpy as np
 from flask import Flask, request, jsonify
+from pymongo import MongoClient
 import os
+import uuid
 import yt_dlp
 import torchvision
 import torchvision.transforms as transforms
@@ -11,12 +13,22 @@ import librosa
 from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
 from efficientnet_pytorch import EfficientNet
 from tqdm import tqdm
+from threading import Thread
+from emailService import sendEmail
 
 USE_MODEL = False
 REMOVE_AFTER_PROCESSING = False
 BATCH_SIZE = 4
 
 app = Flask(__name__)
+
+client = MongoClient('localhost', 27017)
+
+db = client.flask_db
+
+videodb = db.video
+audiodb = db.audio
+
 
 if USE_MODEL == False:
     # with open('./labels_map.txt') as f:
@@ -107,7 +119,31 @@ def analyse_audio():
 
     out_wav_file, info_dict = download_audio(youtubeurl, '.')
     print(out_wav_file)
+    t = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict,request.args.get('email')))
+    t.start()
+    return ('Your audio was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
 
+@app.route('/youtube_audio/<id>', methods=['GET'])
+def get_anyleze_audio(id):
+    words = audiodb.find_one({"audio_id":id})
+    if words is None:
+      return  ('', 404)
+    response = {
+        "audio_id": words['audio_id'],
+        "data": [{
+            "word": d['word'],
+            "start_time": d['start_time'],
+            "end_time": d['end_time'],
+            "censored": d['censored']
+        } for d in words['data'] ],
+        "url": words['url'],
+        "title": words['title']
+    }
+    
+    return (jsonify(response), 200)
+
+
+def anylyze_youtube_audio(out_wav_file, info_dict, mail):
     speech, rate = librosa.load(out_wav_file, sr=16000)
     input_values = feature_extractor(speech, return_tensors="pt").input_values
     logits = model(input_values).logits[0]
@@ -116,7 +152,9 @@ def analyse_audio():
     transcriptions = tokenizer.decode(pred_ids, output_word_offsets=True)
     time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
 
+    audio_id = str(uuid.uuid4())
     words = {
+        "audio_id": audio_id,
         "data": [{
             "word": d["word"],
             "start_time": round(d["start_offset"] * time_offset, 2),
@@ -126,23 +164,49 @@ def analyse_audio():
         "url": info_dict.get('webpage_url'),
         "title": info_dict.get('title')
     }
-
+    audiodb.insert_one(words)
     os.remove(out_wav_file)
 
-    response = jsonify(words)
-    return response
+    link = "http://localhost:5000/youtube_audio/"+audio_id
+    sendEmail(mail, "Audio analysis has been completed",link)
+
+
+    
 
 @app.route('/youtube_video',methods=['POST'])
 def analyse_frames():
 
-    torch.cuda.empty_cache()
+    
     youtubeurl = request.args.get('youtube-url')
 
     out_mp4_file, info_dict = download_video(youtubeurl, '.')
     print(out_mp4_file)
+    t = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict,request.args.get('email')))
+    t.start()
+    return ('Your video was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
+
+
+@app.route('/youtube_video/<id>', methods=['GET'])
+def get_anylyze_video(id):
+    data = videodb.find_one({"video_id":id})
+    if data is None:
+      return  ('', 404)
+    
+    response = {}
+    response["video_id"] = data['video_id']
+    response["url"] = data['url']
+    response["title"] = data['title']
+    video_data = {}
+    for d in data['data']:
+        video_data.update({d['timestamp']:d['value']})
+    response["data"] = video_data
+    return (jsonify(response), 200)
+
+def analyse_video_frames(out_mp4_file, info_dict, mail):
 
     stream = "video"
-    
+
+    torch.cuda.empty_cache()
     video_frames = torch.empty(0)
     video_pts = []
     video = torchvision.io.VideoReader(out_mp4_file, stream)
@@ -185,15 +249,23 @@ def analyse_frames():
     for pts in video_pts:
         data[round(pts, 3)] = int(values[i].item()) if USE_MODEL else round(values[i], 3)
         i += 1
+
+    video_id = str(uuid.uuid4())
     analysis = {}
-    analysis["data"] = data
+    analysis["video_id"] = video_id
+    analysis["data"] = [{
+            "timestamp": d,
+            "value": data[d]
+        } for d in data ]
     analysis["url"] = info_dict.get('webpage_url')
     analysis["title"] = info_dict.get('title')
 
-    response = jsonify(analysis)
-    return response
+    videodb.insert_one(analysis)
 
-@app.route('/youtube_video_info',methods=['POST'])
+    link = "http://localhost:5000/youtube_video/"+video_id
+    sendEmail(mail, "Video analysis has been completed",link)
+
+@app.route('/youtube_video_info',methods=['GET'])
 def get_video_info():
 
     youtubeurl = request.args.get('youtube-url')
