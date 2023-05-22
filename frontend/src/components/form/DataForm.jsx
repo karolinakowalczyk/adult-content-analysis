@@ -7,6 +7,8 @@ import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
 import { useForm } from "react-hook-form";
+import SendDataService from "../../services/sendData.service";
+import { ToastMessage } from "../toast/ToastMessage";
 
 //  TO DO
 // POST data
@@ -15,6 +17,8 @@ export function DataForm() {
   const [url, setUrl] = useState("");
   const [file, setFile] = useState("");
   const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
   const {
     register,
@@ -51,11 +55,25 @@ export function DataForm() {
   };
 
   const onSubmit = (data) => {
-    console.log(data);
+    SendDataService.sendDataWithUrl(data.url, data.email).then(
+      (res) => {
+        setUrl("");
+        setEmail("");
+        setMessage(res.data);
+        setIsError(false);
+      },
+      (error) => {
+        setMessage(error.message);
+        setIsError(true);
+      }
+    );
   };
 
   return (
     <Container className="form-container">
+      {message && (
+        <ToastMessage message={message} isError={isError}></ToastMessage>
+      )}
       <Form onSubmit={handleSubmit(onSubmit)}>
         <Row>
           <Col>
@@ -82,14 +100,12 @@ export function DataForm() {
             </Form.Group>
           </Col>
         </Row>
-
         <Row>
           <Col>
             <Form.Group controlId="file" className="mb-3">
               <Form.Label>Video file: </Form.Label>
               <Form.Control
                 type="file"
-                //value={file}
                 {...register("file", {
                   validate: { isUrlOrFile, checkFileExtention },
                   onChange: (e) => {
