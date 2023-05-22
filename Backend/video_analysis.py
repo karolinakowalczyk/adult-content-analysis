@@ -15,12 +15,14 @@ from efficientnet_pytorch import EfficientNet
 from tqdm import tqdm
 from threading import Thread
 from emailService import sendEmail
+from flask_cors import CORS
 
 USE_MODEL = False
 REMOVE_AFTER_PROCESSING = False
 BATCH_SIZE = 4
 
 app = Flask(__name__)
+CORS(app)
 
 client = MongoClient('localhost', 27017)
 
@@ -170,8 +172,6 @@ def anylyze_youtube_audio(out_wav_file, info_dict, mail):
     link = "http://localhost:5000/youtube_audio/"+audio_id
     sendEmail(mail, "Audio analysis has been completed",link)
 
-
-    
 
 @app.route('/youtube_video',methods=['POST'])
 def analyse_frames():
