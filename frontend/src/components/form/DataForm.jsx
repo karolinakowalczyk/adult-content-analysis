@@ -9,20 +9,11 @@ import Alert from "react-bootstrap/Alert";
 import { useForm } from "react-hook-form";
 
 //  TO DO
-// don't allow user sent url and file both
-// check file extention
 // POST data
 
 export function DataForm() {
   const [url, setUrl] = useState("");
-  const [file, setFile] = useState({
-    lastModified: Number,
-    lastModifiedDate: String,
-    name: "",
-    size: Number,
-    type: "",
-    webkitRelativePath: String,
-  });
+  const [file, setFile] = useState("");
   const [email, setEmail] = useState("");
 
   const {
@@ -32,34 +23,31 @@ export function DataForm() {
   } = useForm();
 
   const isUrlOrFile = () => {
-    if (!url && !file.name) {
+    if (!url && !file) {
+      return false;
+    } else if (url && file) {
+      setUrl("");
+      document.getElementById("file").value = "";
+      setFile("");
       return false;
     }
     return true;
   };
 
-  const checkFileExtention = () => {
-    console.log(file);
+  const checkFileExtention = (e) => {
     if (!file) {
       return;
     }
-    // switch (file.type) {
-    //   case "video/mp4":
-    //     return true;
-    //   case "audio/mpeg":
-    //     return true;
-    //   default:
-    //     setFile({
-    //       lastModified: Number,
-    //       lastModifiedDate: String,
-    //       name: String,
-    //       size: Number,
-    //       type: String,
-    //       webkitRelativePath: String,
-    //     });
-    //     return false;
-    // }
-    return true;
+    switch (file.type) {
+      case "video/mp4":
+        return true;
+      case "audio/mpeg":
+        return true;
+      default:
+        document.getElementById("file").value = "";
+        setFile("");
+        return false;
+    }
   };
 
   const onSubmit = (data) => {
@@ -141,7 +129,9 @@ export function DataForm() {
           </Col>
         </Row>
         {errors.url?.type === "isUrlOrFile" && (
-          <Alert variant="danger">URL or video file is required!</Alert>
+          <Alert variant="danger">
+            URL or video file is required! You can't provide both.
+          </Alert>
         )}
         <Button type="submit">Submit form</Button>
       </Form>
