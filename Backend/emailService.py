@@ -3,13 +3,26 @@ from email.mime.multipart import MIMEMultipart
 from smtplib import SMTP_SSL as SMTP
 from email.mime.text import MIMEText
 
-sender = ''
-USERNAME =''
-PASSWORD = ''
+OPTIONS = {
+  0: 'video',
+  1: 'audio',
+  2: 'video_audio'
+}
 
-def sendEmail(receivers, subject, link):
+sender = 'video.audio.analysis@gmail.com'
+USERNAME = "video.audio.analysis@gmail.com"
+PASSWORD = "reniszqangerzedp"
 
-  message = "Analysis has been completed. See the results on the page: "+link
+def sendEmail(receivers, subject, video_link=None, audio_link=None):
+
+  if video_link == None and audio_link != None:
+      message = "Analysis has been completed. See the results on the page: "+audio_link
+  elif video_link != None and audio_link == None:
+      message = "Analysis has been completed. See the results on the page: "+video_link
+  elif video_link != None and audio_link != None:
+      message = "Analysis has been completed." + "\n\
+        Video analysis results on the page: "+video_link + "\n\
+        Audio analysis results on the page: "+audio_link
   # Setup the MIME
   mail = MIMEMultipart()
   mail['From'] = USERNAME

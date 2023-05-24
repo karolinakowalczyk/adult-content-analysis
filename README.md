@@ -4,3 +4,6 @@ The analysis is based on the pornography classification of each video frame usin
 
 Needs instalation:
 https://phoenixnap.com/kb/ffmpeg-windows 
+
+Link to model:
+https://drive.google.com/file/d/1-ti87dzJ7dkLDxISa18H7jsztN_5qjrM/view?usp=sharing

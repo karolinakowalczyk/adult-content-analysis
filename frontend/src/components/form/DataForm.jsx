@@ -18,7 +18,9 @@ export function DataForm() {
   const [file, setFile] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedOption, setSelectedOption] = useState(false);
   const [isError, setIsError] = useState(false);
+  const [isSubmit, setIsSubmit] = useState(false);
 
   const {
     register,
@@ -54,19 +56,61 @@ export function DataForm() {
     }
   };
 
+  const handleChange = e => {
+    e.persist();
+    console.log(e.target.value)
+    setSelectedOption(e.target.value)
+  };
+
   const onSubmit = (data) => {
-    SendDataService.sendDataWithUrl(data.url, data.email).then(
-      (res) => {
-        setUrl("");
-        setEmail("");
-        setMessage(res.data);
-        setIsError(false);
-      },
-      (error) => {
-        setMessage(error.message);
-        setIsError(true);
-      }
-    );
+    setIsSubmit(true);
+    if (selectedOption === "audioframes") {
+      SendDataService.sendDataWithUrlForVideoAudioAnalysis(data.url, data.email).then(
+        (res) => {
+          setUrl("");
+          setEmail("");
+          setIsSubmit(false)
+          setMessage(res.data);
+          setIsError(false);
+        },
+        (error) => {
+          setIsSubmit(false)
+          setMessage(error.message);
+          setIsError(true);
+        }
+      );
+    } else if (selectedOption === "audio") {
+      console.log("audio");
+      SendDataService.sendDataWithUrlForAudioAnalysis(data.url, data.email).then(
+        (res) => {
+          setUrl("");
+          setEmail("");
+          setIsSubmit(false)
+          setMessage(res.data);
+          setIsError(false);
+        },
+        (error) => {
+          setIsSubmit(false)
+          setMessage(error.message);
+          setIsError(true);
+        }
+      );
+    } else if (selectedOption === "video") {
+      SendDataService.sendDataWithUrlForVideoAnalysis(data.url, data.email).then(
+        (res) => {
+          setUrl("");
+          setEmail("");
+          setIsSubmit(false)
+          setMessage(res.data);
+          setIsError(false);
+        },
+        (error) => {
+          setIsSubmit(false)
+          setMessage(error.message);
+          setIsError(true);
+        }
+      );
+    }
   };
 
   return (
@@ -149,7 +193,53 @@ export function DataForm() {
             URL or video file is required! You can't provide both.
           </Alert>
         )}
-        <Button type="submit">Submit form</Button>
+        <Col className="mb-3">
+          <Row>
+            <Row>
+              <Form.Check
+                  value="audioframes"
+                  className="mb-3"
+                  inline
+                  label="Audio & Video Analysis"
+                  name="group1"
+                  type="radio"
+                  id="audioframes"
+                  defaultChecked
+                  onChange={handleChange}
+                />
+            </Row>
+            <Row>
+              <Form.Check
+                  value="video"
+                  className="mb-3"
+                  inline
+                  label="Video Analysis"
+                  name="group1"
+                  type="radio"
+                  id="video"
+                  onChange={handleChange}
+                />
+            </Row>
+            <Row>
+              <Form.Check
+                  value="audio"
+                  inline
+                  label="Audio Analysis"
+                  name="group1"
+                  type="radio"
+                  id="audio"
+                  onChange={handleChange}
+                />
+            </Row>
+          </Row>
+        </Col>
+        
+        <Button type="submit" disabled={isSubmit}>
+          {isSubmit && (
+              <span className="spinner-grow spinner-grow-sm"></span>
+          )}
+          Submit form
+        </Button>
       </Form>
     </Container>
   );

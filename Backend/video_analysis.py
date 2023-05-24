@@ -10,16 +10,20 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torch
 import librosa
-from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
-from efficientnet_pytorch import EfficientNet
+from transformers import Wav2Vec2Processor, AutoFeatureExtractor, Wav2Vec2ForCTC
 from tqdm import tqdm
 from threading import Thread
+import queue
 from emailService import sendEmail
+from modelHelpers import getModel
 from flask_cors import CORS
 
-USE_MODEL = False
+USE_MODEL = True
 REMOVE_AFTER_PROCESSING = False
-BATCH_SIZE = 4
+BATCH_SIZE = 30
+SAMPLE_RATE = 16000
+AUDIO_EXTENSION = 'wav'
+VIDEO_EXTENSION = 'mp4'
 
 app = Flask(__name__)
 CORS(app)
@@ -32,28 +36,33 @@ videodb = db.video
 audiodb = db.audio
 
 
-if USE_MODEL == False:
-    # with open('./labels_map.txt') as f:
-    #     labels_map = json.load(f)
-    # labels_map = [labels_map[str(i)] for i in range(1000)]
+if USE_MODEL == True:
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     # device = torch.device("cpu")
     print(device)
-    image_model = EfficientNet.from_pretrained('efficientnet-b4')
+    image_model = getModel()
     image_model.to(device).eval()
+    print("model loaded")
 
-tfms = transforms.Compose([transforms.Resize(224, antialias=True),
-                        transforms.Normalize(
+tfms = transforms.Compose([transforms. ToPILImage(),
+                           transforms.Resize(224, antialias=True),
+                           transforms.CenterCrop(size=224),
+                           transforms.ToTensor(),
+                           transforms.Normalize(
                                 [0.485, 0.456, 0.406],
                                 [0.229, 0.224, 0.225]),
                         ])
+invtrans = transforms.Compose([transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225],
+                            std=[1/0.229, 1/0.224, 1/0.255])])
 
-AUDIO_EXTENSION = 'wav'
-VIDEO_EXTENSION = 'mp4'
-
-model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
-feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+audio_device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+audio_device = torch.device("cpu")
+# model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h").to(audio_device)
+# tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+tokenizer = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h")
+model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h")
+model.to(audio_device).eval()
+feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-large-960h")
 
 
 from torch.utils.data import Dataset
@@ -77,15 +86,12 @@ class CustomTensorDataset(Dataset):
 
 def analyse_frame(image):
     if USE_MODEL == True:
-        img = tfms(image).to(device)
-        output = image_model(img)
-        class_idx = output.argmax(dim=-1)
-        return class_idx
+        with torch.no_grad():
+            image = image.to(device)
+            output = image_model(image)
+        return output
     else:
-        if image.dim() == 4:
-            return np.random.beta(1, 5, image.shape[0])
-        else:
-            return np.random.beta(1, 5)
+        return np.random.beta(1, 5, image.shape[0])
     
 
 def download_audio(url, output_path):
@@ -125,6 +131,27 @@ def analyse_audio():
     t.start()
     return ('Your audio was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
 
+@app.route('/youtube_video_audio',methods=['POST'])
+def analyse_video_audio():
+
+    youtubeurl = request.args.get('youtube-url')
+
+    out_wav_file, info_dict = download_audio(youtubeurl, '.')
+    print(out_wav_file)
+    out_mp4_file, info_dict = download_video(youtubeurl, '.')
+    print(out_mp4_file)
+    
+    q = queue.Queue()
+    a = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict, request.args.get('email'), 0, True, q))
+    v = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict, request.args.get('email'), 1, True, q))
+
+    a.start()
+    v.start()
+
+
+    return ('Data was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
+
+
 @app.route('/youtube_audio/<id>', methods=['GET'])
 def get_anyleze_audio(id):
     words = audiodb.find_one({"audio_id":id})
@@ -145,13 +172,30 @@ def get_anyleze_audio(id):
     return (jsonify(response), 200)
 
 
-def anylyze_youtube_audio(out_wav_file, info_dict, mail):
+def anylyze_youtube_audio(out_wav_file, info_dict, mail, id=None, video_audio=False, result_queue=None):
     speech, rate = librosa.load(out_wav_file, sr=16000)
-    input_values = feature_extractor(speech, return_tensors="pt").input_values
-    logits = model(input_values).logits[0]
-    pred_ids = torch.argmax(logits, axis=-1)
 
-    transcriptions = tokenizer.decode(pred_ids, output_word_offsets=True)
+    chunk_duration = 5 # sec
+    padding_duration = 1 # sec
+
+    chunk_len = chunk_duration*SAMPLE_RATE
+    input_padding_len = int(padding_duration*SAMPLE_RATE)
+    output_padding_len = model._get_feat_extract_output_lengths(input_padding_len)
+
+
+    all_preds = []
+    for start in range(input_padding_len, len(speech)-input_padding_len, chunk_len):
+        chunk = speech[start-input_padding_len:start+chunk_len+input_padding_len]
+        
+        input_values = feature_extractor(chunk, sampling_rate=SAMPLE_RATE, return_tensors="pt").input_values.to(audio_device)
+        with torch.no_grad():
+            logits = model(input_values).logits[0]
+            logits = logits[output_padding_len:len(logits)-output_padding_len]
+
+            pred_ids = torch.argmax(logits, axis=-1)
+            all_preds.append(pred_ids.cpu())
+
+    transcriptions = tokenizer.decode(torch.cat(all_preds), output_word_offsets=True)
     time_offset = model.config.inputs_to_logits_ratio / feature_extractor.sampling_rate
 
     audio_id = str(uuid.uuid4())
@@ -167,16 +211,26 @@ def anylyze_youtube_audio(out_wav_file, info_dict, mail):
         "title": info_dict.get('title')
     }
     audiodb.insert_one(words)
-    os.remove(out_wav_file)
 
-    link = "http://localhost:5000/youtube_audio/"+audio_id
-    sendEmail(mail, "Audio analysis has been completed",link)
+    if REMOVE_AFTER_PROCESSING:
+        os.remove(out_wav_file)
+
+    if video_audio:
+        if not result_queue.empty():
+            video_link = result_queue.get()[1]
+            audio_link = "http://localhost:5000/youtube_audio/"+audio_id
+            sendEmail(mail, "Analysis has been completed", video_link, audio_link)
+        else:
+            result_queue.put((id, "http://localhost:5000/youtube_audio/"+audio_id))
+    else:
+        link = "http://localhost:5000/youtube_audio/"+audio_id
+        sendEmail(mail, "Audio analysis has been completed", None, link)
 
 
 @app.route('/youtube_video',methods=['POST'])
 def analyse_frames():
 
-    
+    print("started")
     youtubeurl = request.args.get('youtube-url')
 
     out_mp4_file, info_dict = download_video(youtubeurl, '.')
@@ -202,22 +256,19 @@ def get_anylyze_video(id):
     response["data"] = video_data
     return (jsonify(response), 200)
 
-def analyse_video_frames(out_mp4_file, info_dict, mail):
+def analyse_video_frames(out_mp4_file, info_dict, mail, id=None, video_audio=False, result_queue=None):
 
     stream = "video"
 
-    torch.cuda.empty_cache()
     video_frames = torch.empty(0)
     video_pts = []
     video = torchvision.io.VideoReader(out_mp4_file, stream)
     meta_data = video.get_metadata()
     print(meta_data)
-    fps = round(meta_data['video']['fps'][0])
 
-    video.set_current_stream("video")
     frames = []
     for frame in video:
-        frames.append(frame['data'].type(dtype=torch.float32))
+        frames.append(frame['data'])
         video_pts.append(frame['pts'])
     if len(frames) > 0:
         
@@ -233,21 +284,21 @@ def analyse_video_frames(out_mp4_file, info_dict, mail):
     if REMOVE_AFTER_PROCESSING == True:
         os.remove(out_mp4_file)
 
-    
-    values = torch.empty(0) if USE_MODEL else []
-    i = 0
-
+    values = []
     with tqdm(dataloader, unit="batch") as tepoch:
+        
         for imgs in tepoch:
-            outputs = analyse_frame(imgs)
             if USE_MODEL:
-                values = torch.hstack([values, outputs.detach().cpu()])
+                outputs = analyse_frame(imgs).detach().cpu()
+                for o in outputs:
+                    values.append(1. - o.item())
             else:
+                outputs = np.random.beta(1, 5, imgs.shape[0])
                 values = [*values, *outputs]
     data = {}
     i = 0
     for pts in video_pts:
-        data[round(pts, 3)] = int(values[i].item()) if USE_MODEL else round(values[i], 3)
+        data[round(pts, 3)] = round(values[i], 3)
         i += 1
 
     video_id = str(uuid.uuid4())
@@ -262,8 +313,16 @@ def analyse_video_frames(out_mp4_file, info_dict, mail):
 
     videodb.insert_one(analysis)
 
-    link = "http://localhost:5000/youtube_video/"+video_id
-    sendEmail(mail, "Video analysis has been completed",link)
+    if video_audio:
+        if not result_queue.empty():
+            audio_link = result_queue.get()[1]
+            video_link = "http://localhost:5000/youtube_video/"+video_id
+            sendEmail(mail, "Analysis has been completed", video_link, audio_link)
+        else:
+            result_queue.put((id, "http://localhost:5000/youtube_video/"+video_id))
+    else:
+        link = "http://localhost:5000/youtube_video/"+video_id
+        sendEmail(mail, "Video analysis has been completed", link, None)
 
 @app.route('/youtube_video_info',methods=['GET'])
 def get_video_info():
