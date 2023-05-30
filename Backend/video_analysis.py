@@ -218,12 +218,12 @@ def anylyze_youtube_audio(out_wav_file, info_dict, mail, id=None, video_audio=Fa
     if video_audio:
         if not result_queue.empty():
             video_link = result_queue.get()[1]
-            audio_link = "http://localhost:5000/youtube_audio/"+audio_id
+            audio_link = "http://localhost:3000/youtube_audio/"+audio_id
             sendEmail(mail, "Analysis has been completed", video_link, audio_link)
         else:
-            result_queue.put((id, "http://localhost:5000/youtube_audio/"+audio_id))
+            result_queue.put((id, "http://localhost:3000/youtube_audio/"+audio_id))
     else:
-        link = "http://localhost:5000/youtube_audio/"+audio_id
+        link = "http://localhost:3000/youtube_audio/"+audio_id
         sendEmail(mail, "Audio analysis has been completed", None, link)
 
 
@@ -316,12 +316,12 @@ def analyse_video_frames(out_mp4_file, info_dict, mail, id=None, video_audio=Fal
     if video_audio:
         if not result_queue.empty():
             audio_link = result_queue.get()[1]
-            video_link = "http://localhost:5000/youtube_video/"+video_id
+            video_link = "http://localhost:3000/youtube_video/"+video_id
             sendEmail(mail, "Analysis has been completed", video_link, audio_link)
         else:
-            result_queue.put((id, "http://localhost:5000/youtube_video/"+video_id))
+            result_queue.put((id, "http://localhost:3000/youtube_video/"+video_id))
     else:
-        link = "http://localhost:5000/youtube_video/"+video_id
+        link = "http://localhost:3000/youtube_video/"+video_id
         sendEmail(mail, "Video analysis has been completed", link, None)
 
 @app.route('/youtube_video_info',methods=['GET'])
