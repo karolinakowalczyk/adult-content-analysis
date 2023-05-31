@@ -26,57 +26,58 @@ ChartJS.register(
 
 export function LineChart() {
   const [videoId, setVideoId] = useState();
-  const [videoData, setVideoData] = useState({});
   const [chartLabels, setChartLabels] = useState([]);
   const [chartValues, setChartValues] = useState([]);
   const [displayChart, setDisplayChart] = useState(false);
   const [videoTitle, setVideoTitle] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
-  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState("");
   const id = useParams();
 
-  const [chartData, setChartData] = useState({});
   useEffect(() => {
+    console.log("tu");
     setVideoId(id.video_id);
     if (videoId) {
-      GetAnalysedDataService.getAnalysedVideo(videoId).then(
-        (response) => {
-          setVideoData(response.data.data);
-          setVideoTitle(response.data.title);
-          setVideoUrl(response.data.url);
-          let timetamps = [];
-          let results = [];
-          for (let d in videoData) {
-            timetamps.push(d);
-            results.push(videoData[d]);
+      GetAnalysedDataService.getAnalysedVideo(videoId)
+        .then(
+          (response) => {
+            setVideoTitle(response.data.title);
+            setVideoUrl(response.data.url);
+            let timetamps = [];
+            let results = [];
+            for (let d in response.data.data) {
+              timetamps.push(d);
+              results.push(response.data.data[d]);
+            }
+            setChartLabels(timetamps);
+            setChartValues(results);
+            setDisplayChart(true);
+          },
+          (error) => {
+            const resMessage =
+              (error.response &&
+                error.response.data &&
+                error.response.data.message) ||
+              error.message ||
+              error.toString();
+            setError(resMessage);
           }
-          setChartLabels(timetamps);
-          setChartValues(results);
-          setChartData({
-            labels: chartLabels,
-            datasets: [
-              {
-                label: videoTitle,
-                data: chartValues,
-                backgroundColor: "violet",
-                borderColor: "violet",
-              },
-            ],
-          });
-          setDisplayChart(true);
-        },
-        (error) => {
-          const resMessage =
-            (error.response &&
-              error.response.data &&
-              error.response.data.message) ||
-            error.message ||
-            error.toString();
-          setIsError(resMessage);
-        }
-      );
+        )
+        .catch((error) => setError(error));
     }
-  }, [chartLabels, chartValues, id, videoData, videoId, videoTitle]);
+  }, [videoId, displayChart, id]);
+
+  const data = {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: videoTitle,
+        data: chartValues,
+        backgroundColor: "violet",
+        borderColor: "violet",
+      },
+    ],
+  };
   return (
     <Container>
       <a href={videoUrl} target="_blank" rel="noreferrer">
@@ -84,7 +85,7 @@ export function LineChart() {
       </a>
       {displayChart && (
         <Line
-          data={chartData}
+          data={data}
           options={{
             scales: {
               y: {
@@ -104,7 +105,7 @@ export function LineChart() {
           }}
         />
       )}
-      {isError && <Alert variant="danger">Something went wrong...</Alert>}
+      {error && <Alert variant="danger">Something went wrong...</Alert>}
     </Container>
   );
 }
