@@ -9,9 +9,9 @@ OPTIONS = {
   2: 'video_audio'
 }
 
-sender = 'video.audio.analysis@gmail.com'
-USERNAME = "video.audio.analysis@gmail.com"
-PASSWORD = "reniszqangerzedp"
+sender = ''
+USERNAME = ""
+PASSWORD = ""
 
 def sendEmail(receivers, subject, video_link=None, audio_link=None):
 
