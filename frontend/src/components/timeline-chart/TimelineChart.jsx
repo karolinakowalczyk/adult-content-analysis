@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import GetAnalysedDataService from "../../services/getAnalysedData.service";
-import Container from "react-bootstrap/esm/Container";
 import Alert from "react-bootstrap/Alert";
 import "./TimelineChart.scss";
 import { Bar } from "react-chartjs-2";
@@ -17,6 +16,7 @@ import {
   BarElement,
   TimeScale,
 } from "chart.js";
+import Container from "react-bootstrap/esm/Container";
 ChartJS.register(
   Title,
   Tooltip,
@@ -29,16 +29,13 @@ ChartJS.register(
   TimeScale
 );
 
-//TO DO:
-//improve scale
-// add display WORDS!
-
 export function TimelineChart() {
   const [audioId, setAudioId] = useState();
   const [error, setError] = useState("");
   const [displayChart, setDisplayChart] = useState(false);
   const [goodWords, setGoodWords] = useState([]);
   const [badWords, setBadWords] = useState([]);
+  const [allWords, setAllWords] = useState([]);
   const [audioTitle, setAudioTitle] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const id = useParams();
@@ -51,8 +48,10 @@ export function TimelineChart() {
           (response) => {
             let goodBufor = [];
             let badBufor = [];
+            let words = [];
 
             response.data.data.forEach((element) => {
+              words.push(element["word"]);
               if (element["censored"] === 1) {
                 badBufor.push({
                   x: [element["start_time"], element["end_time"]],
@@ -69,6 +68,7 @@ export function TimelineChart() {
             setAudioUrl(response.data.url);
             setGoodWords(goodBufor);
             setBadWords(badBufor);
+            setAllWords(words);
             setDisplayChart(true);
           },
           (error) => {
@@ -90,14 +90,14 @@ export function TimelineChart() {
     labels: ["Censored"],
     datasets: [
       {
-        label: "BADWord",
+        label: "Yes",
         data: badWords,
         backgroundColor: ["rgb(255, 99, 132)"],
         borderColor: ["rgb(255, 99, 132)"],
         borderWidth: 1,
       },
       {
-        label: "GOODWord",
+        label: "No",
         data: goodWords,
         backgroundColor: ["rgb(75, 192, 192)"],
         borderColor: ["rgb(75, 192, 192)"],
@@ -118,12 +118,12 @@ export function TimelineChart() {
             barPercentage: 1,
             categoryPercentage: 1,
             scales: {
-              // x: {
-              //   type: "time",
-              //   time: {
-              //     unit: "hour",
-              //   },
-              // },
+              x: {
+                title: {
+                  display: true,
+                  text: "Audio Timestamp [s]",
+                },
+              },
               y: {
                 beginAtZero: true,
                 stacked: true,
@@ -133,6 +133,13 @@ export function TimelineChart() {
               title: {
                 display: true,
                 text: audioTitle,
+              },
+              tooltip: {
+                callbacks: {
+                  title: function (context) {
+                    return `${allWords[context[0].dataIndex]}`;
+                  },
+                },
               },
               legend: {
                 display: false,

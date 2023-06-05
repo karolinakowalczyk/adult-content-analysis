@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import GetAnalysedDataService from "../../services/getAnalysedData.service";
+import "./LineChart.scss";
 import Container from "react-bootstrap/Container";
 import Alert from "react-bootstrap/Alert";
 import { useParams } from "react-router-dom";
