@@ -17,6 +17,8 @@ import queue
 from emailService import sendEmail
 from modelHelpers import getModel
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+from pydub import AudioSegment
 
 USE_MODEL = True
 REMOVE_AFTER_PROCESSING = False
@@ -122,31 +124,76 @@ def download_video(url, output_path):
 
 @app.route('/youtube_audio',methods=['POST'])
 def analyse_audio():
+    if 'file' in request.files:
+        file = request.files['file']
+        file_name=secure_filename(file.filename)
+        file.save(file_name)
+        name=file_name.split(".")[0]
+        sound = AudioSegment.from_file(file_name,format="mp4")
+        sound.export(name+'.wav', format="wav")
+        info_dict = {"webpage_url": "from file", "title": name}
+        t = Thread(target=anylyze_youtube_audio, args=(name+'.wav', info_dict,request.args.get('email')))
+        t.start()
+    else:
+        youtubeurl = request.args.get('youtube-url')
 
-    youtubeurl = request.args.get('youtube-url')
-
-    out_wav_file, info_dict = download_audio(youtubeurl, '.')
-    print(out_wav_file)
-    t = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict,request.args.get('email')))
-    t.start()
+        out_wav_file, info_dict = download_audio(youtubeurl, '.')
+        print(out_wav_file)
+        t = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict,request.args.get('email')))
+        t.start()
     return ('Your audio was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
+
+@app.route('/youtube_video',methods=['POST'])
+def analyse_frames():
+    if 'file' in request.files:
+        file = request.files['file']
+        file_name=secure_filename(file.filename)
+        file.save(file_name)
+        name=file_name.split(".")[0]
+        info_dict = {"webpage_url": "from file", "title": name}
+        t = Thread(target=analyse_video_frames, args=(file_name, info_dict,request.args.get('email')))
+        t.start()
+    else:
+        print("started")
+        youtubeurl = request.args.get('youtube-url')
+
+        out_mp4_file, info_dict = download_video(youtubeurl, '.')
+        print(out_mp4_file)
+        t = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict,request.args.get('email')))
+        t.start()
+    return ('Your video was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
+
 
 @app.route('/youtube_video_audio',methods=['POST'])
 def analyse_video_audio():
+    if 'file' in request.files:
+        file = request.files['file']
+        file_name=secure_filename(file.filename)
+        file.save(file_name)
+        name=file_name.split(".")[0]
+        sound = AudioSegment.from_file(file_name,format="mp4")
+        sound.export(name+'.wav', format="wav")
+        info_dict = {"webpage_url": "from file", "title": name}
+        q = queue.Queue()
+        a = Thread(target=anylyze_youtube_audio, args=(name+'.wav', info_dict, request.args.get('email'), 0, True, q))
+        v = Thread(target=analyse_video_frames, args=(file_name, info_dict, request.args.get('email'), 1, True, q))
 
-    youtubeurl = request.args.get('youtube-url')
+        a.start()
+        v.start()
+    else:
+        youtubeurl = request.args.get('youtube-url')
 
-    out_wav_file, info_dict = download_audio(youtubeurl, '.')
-    print(out_wav_file)
-    out_mp4_file, info_dict = download_video(youtubeurl, '.')
-    print(out_mp4_file)
+        out_wav_file, info_dict = download_audio(youtubeurl, '.')
+        print(out_wav_file)
+        out_mp4_file, info_dict = download_video(youtubeurl, '.')
+        print(out_mp4_file)
     
-    q = queue.Queue()
-    a = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict, request.args.get('email'), 0, True, q))
-    v = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict, request.args.get('email'), 1, True, q))
+        q = queue.Queue()
+        a = Thread(target=anylyze_youtube_audio, args=(out_wav_file, info_dict, request.args.get('email'), 0, True, q))
+        v = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict, request.args.get('email'), 1, True, q))
 
-    a.start()
-    v.start()
+        a.start()
+        v.start()
 
 
     return ('Data was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
@@ -227,17 +274,7 @@ def anylyze_youtube_audio(out_wav_file, info_dict, mail, id=None, video_audio=Fa
         sendEmail(mail, "Audio analysis has been completed", None, link)
 
 
-@app.route('/youtube_video',methods=['POST'])
-def analyse_frames():
 
-    print("started")
-    youtubeurl = request.args.get('youtube-url')
-
-    out_mp4_file, info_dict = download_video(youtubeurl, '.')
-    print(out_mp4_file)
-    t = Thread(target=analyse_video_frames, args=(out_mp4_file, info_dict,request.args.get('email')))
-    t.start()
-    return ('Your video was succesfully downloaded and sent to analyze.\n After completion, you will receive a message with an email link to the results.', 200)
 
 
 @app.route('/youtube_video/<id>', methods=['GET'])
