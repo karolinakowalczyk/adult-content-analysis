@@ -64,7 +64,8 @@ export function DataForm() {
     if (selectedOption === "audioframes") {
       SendDataService.sendDataWithUrlForVideoAudioAnalysis(
         data.url,
-        data.email
+        data.email,
+        data.file
       ).then(
         (res) => {
           setUrl("");
@@ -83,7 +84,8 @@ export function DataForm() {
       console.log("audio");
       SendDataService.sendDataWithUrlForAudioAnalysis(
         data.url,
-        data.email
+        data.email,
+        data.file
       ).then(
         (res) => {
           setUrl("");
@@ -101,7 +103,8 @@ export function DataForm() {
     } else if (selectedOption === "video") {
       SendDataService.sendDataWithUrlForVideoAnalysis(
         data.url,
-        data.email
+        data.email,
+        data.file
       ).then(
         (res) => {
           setUrl("");
