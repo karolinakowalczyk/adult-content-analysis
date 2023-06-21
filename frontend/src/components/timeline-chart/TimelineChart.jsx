@@ -35,7 +35,6 @@ export function TimelineChart() {
   const [displayChart, setDisplayChart] = useState(false);
   const [goodWords, setGoodWords] = useState([]);
   const [badWords, setBadWords] = useState([]);
-  const [allWords, setAllWords] = useState([]);
   const [audioTitle, setAudioTitle] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const id = useParams();
@@ -48,17 +47,18 @@ export function TimelineChart() {
           (response) => {
             let goodBufor = [];
             let badBufor = [];
-            let words = [];
+            // let words = [];
 
             response.data.data.forEach((element) => {
-              words.push(element["word"]);
               if (element["censored"] === 1) {
                 badBufor.push({
+                  word: element["word"],
                   x: [element["start_time"], element["end_time"]],
                   y: "Censored",
                 });
-              } else {
+              } else if (element["censored"] === 0) {
                 goodBufor.push({
+                  word: element["word"],
                   x: [element["start_time"], element["end_time"]],
                   y: "Censored",
                 });
@@ -68,7 +68,6 @@ export function TimelineChart() {
             setAudioUrl(response.data.url);
             setGoodWords(goodBufor);
             setBadWords(badBufor);
-            setAllWords(words);
             setDisplayChart(true);
           },
           (error) => {
@@ -137,7 +136,8 @@ export function TimelineChart() {
               tooltip: {
                 callbacks: {
                   title: function (context) {
-                    return `${allWords[context[0].dataIndex]}`;
+                    console.log()
+                    return `${context[0].raw.word}`;
                   },
                 },
               },

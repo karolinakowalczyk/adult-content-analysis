@@ -91,6 +91,7 @@ export function LineChart() {
             scales: {
               y: {
                 beginAtZero: true,
+                suggestedMax: 1,
                 title: {
                   display: true,
                   text: "Adult content intensity",

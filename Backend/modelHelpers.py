@@ -23,13 +23,14 @@ class MemoryEfficientSwish(nn.Module):
         return SwishImplementation.apply(x)
 
 def getModel():
-    image_model = EfficientNet.from_name('efficientnet-b4', num_classes=1000)
+    image_model = EfficientNet.from_name('efficientnet-b3', num_classes=1000)
     image_model = nn.Sequential(image_model,
                       nn.Dropout(p=0.2, inplace=True),
                       nn.Linear(1000, 512),
                       nn.BatchNorm1d(512),
                       MemoryEfficientSwish(),
+                      nn.Dropout(p=0.2, inplace=True),
                       nn.Linear(512, 1),
                       nn.Sigmoid())
-    image_model.load_state_dict(torch.load(os.getcwd() + '\model.pth'))
+    image_model.load_state_dict(torch.load(os.getcwd() + '\EfficientNet-B3-tf.pth'))
     return image_model

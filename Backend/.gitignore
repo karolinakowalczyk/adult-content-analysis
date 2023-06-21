@@ -1,3 +1,5 @@
-model.pth
+.pth
+.ckpt
 .venv
+images
 __pycache__

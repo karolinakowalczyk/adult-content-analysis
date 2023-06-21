@@ -9,18 +9,18 @@ OPTIONS = {
   2: 'video_audio'
 }
 
-sender = ''
-USERNAME = ""
-PASSWORD = ""
+sender = 'video.audio.analysis@gmail.com'
+USERNAME = "video.audio.analysis@gmail.com"
+PASSWORD = "reniszqangerzedp"
 
-def sendEmail(receivers, subject, video_link=None, audio_link=None):
+def sendEmail(receivers, subject, video_link=None, audio_link=None, video_name=''):
 
   if video_link == None and audio_link != None:
-      message = "Analysis has been completed. See the results on the page: "+audio_link
+      message = "Analysis for \"{}\" has been completed. See the results on the page: {}".format(video_name, audio_link)
   elif video_link != None and audio_link == None:
-      message = "Analysis has been completed. See the results on the page: "+video_link
+      message = "Analysis for \"{}\" has been completed. See the results on the page: {}".format(video_name, video_link)
   elif video_link != None and audio_link != None:
-      message = "Analysis has been completed." + "\n\
+      message = "Analysis for \"{}\" has been completed.".format(video_name) + "\n\
         Video analysis results on the page: "+video_link + "\n\
         Audio analysis results on the page: "+audio_link
   # Setup the MIME
