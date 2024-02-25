@@ -4,3 +4,9 @@ The analysis is based on the pornography classification of each video frame usin
 
 Needs instalation:
 https://phoenixnap.com/kb/ffmpeg-windows 
+
+![main-page](https://github.com/karolinakowalczyk/adult-content-analysis/assets/47788618/c6f759e8-66ff-4c82-a469-552f0d79a95a)
+
+![plot-1](https://github.com/karolinakowalczyk/adult-content-analysis/assets/47788618/6528b625-7a68-4c1e-8c47-6c9159ed99d2)
+
+![plot-2](https://github.com/karolinakowalczyk/adult-content-analysis/assets/47788618/2f7b701b-987f-4440-b1c0-7b5e8306aff7)
